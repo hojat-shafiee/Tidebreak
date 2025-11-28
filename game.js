@@ -518,5 +518,14 @@ class Game {
 
 // Initialize game when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    new Game();
+    const startBtn = document.getElementById('startBtn');
+    const mainMenu = document.getElementById('mainMenu');
+    const gameContainer = document.getElementById('gameContainer');
+
+    // Start game button click handler
+    startBtn.addEventListener('click', () => {
+        mainMenu.style.display = 'none';
+        gameContainer.style.display = 'flex';
+        new Game();
+    });
 });

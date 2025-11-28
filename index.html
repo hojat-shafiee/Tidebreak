@@ -3,11 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wave Collector - Game Off 2025</title>
+    <title>Tide Break - Game Off 2025</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="game-container">
+    <div class="main-menu" id="mainMenu">
+        <div class="menu-content">
+            <h1 class="game-title">TIDE BREAK</h1>
+            <div class="menu-description">
+                <h2>How to Play</h2>
+                <div class="instructions">
+                    <p>🎮 <strong>Objective:</strong> Collect falling items to earn points while avoiding hazards.</p>
+                    
+                    <p>⭐ <strong>Positive Items:</strong></p>
+                    <ul>
+                        <li><span class="item-star">★</span> Star - 100 points (highest value)</li>
+                        <li><span class="item-diamond">◆</span> Diamond - 75 points</li>
+                        <li><span class="item-heart">♥</span> Heart - 50 points + restores health</li>
+                    </ul>
+                    
+                    <p>⚠️ <strong>Negative Items:</strong></p>
+                    <ul>
+                        <li><span class="item-spike">▲</span> Spike - -30 points + decreases health</li>
+                        <li><span class="item-poison">■</span> Poison - -50 points (no health loss if missed)</li>
+                    </ul>
+                    
+                    <p>🎯 <strong>Controls:</strong></p>
+                    <ul>
+                        <li>Keyboard: Arrow Keys or A/D to move</li>
+                        <li>Mouse: Move your cursor to follow</li>
+                        <li>Touch: Swipe or drag on mobile</li>
+                    </ul>
+                    
+                    <p>⚡ <strong>Gameplay:</strong></p>
+                    <ul>
+                        <li>Build combos with consecutive positive items for multiplied points</li>
+                        <li>Avoid missing more than 5 items (health bar in top-right)</li>
+                        <li>Difficulty increases every 15 seconds</li>
+                    </ul>
+                </div>
+            </div>
+            <button class="start-btn" id="startBtn">START GAME</button>
+            <div class="credits">
+                <p><strong>Game Designer:</strong> Hojat Shafiee</p>
+                <p><strong>Developer:</strong> Claude Haiku 4.5</p>
+                <p><strong>Game Off 2025</strong> | Theme: WAVES</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-container" id="gameContainer" style="display: none;">
         <div class="hud">
             <div class="score-display">
                 <div class="score-label">SCORE</div>
