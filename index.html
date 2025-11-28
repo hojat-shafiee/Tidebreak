@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wave Collector - Game Off 2025</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="hud">
+            <div class="score-display">
+                <div class="score-label">SCORE</div>
+                <div class="score-value" id="scoreValue">0</div>
+            </div>
+            <div class="multiplier-display">
+                <div class="multiplier-label">COMBO</div>
+                <div class="multiplier-value" id="multiplierValue">1x</div>
+            </div>
+            <div class="wave-display">
+                <div class="wave-label">WAVE</div>
+                <div class="wave-value" id="waveValue">1</div>
+            </div>
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="game-over-modal" id="gameOverModal">
+            <div class="modal-content">
+                <h1>GAME OVER</h1>
+                <div class="final-score">
+                    <div class="score-label">FINAL SCORE</div>
+                    <div class="score-value" id="finalScore">0</div>
+                </div>
+                <div class="final-stats">
+                    <div class="stat">
+                        <span class="stat-label">Wave Reached:</span>
+                        <span class="stat-value" id="finalWave">1</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Items Collected:</span>
+                        <span class="stat-value" id="finalItems">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Max Combo:</span>
+                        <span class="stat-value" id="finalCombo">0</span>
+                    </div>
+                </div>
+                <button class="restart-btn" id="restartBtn">RESTART GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="audio.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
