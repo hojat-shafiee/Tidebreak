@@ -1,531 +1,661 @@
-// ============================================================
-// WAVE COLLECTOR - Game Off 2025
-// A 2D top-down arcade game with wave-based mechanics
-// ============================================================
-
-class GameConfig {
-    static CANVAS_WIDTH = 800;
-    static CANVAS_HEIGHT = 600;
-    static PLAYER_SIZE = 30;
-    static ITEM_SIZE = 25;
-    static BASE_SPAWN_RATE = 1; // items per second initially (reduced from 2)
-    static BASE_ITEM_SPEED = 2; // pixels per frame (reduced from 3)
-    static WAVE_INCREASE_INTERVAL = 15000; // ms
-    static MISSED_ITEMS_LIMIT = 5;
-}
-
-class ItemType {
-    constructor(id, name, color, shape, points, isNegative = false) {
-        this.id = id;
-        this.name = name;
-        this.color = color;
-        this.shape = shape; // 'circle', 'square', 'triangle', 'star', 'diamond'
-        this.points = points;
-        this.isNegative = isNegative;
-    }
-}
-
-// Item categories
-const ITEM_TYPES = {
-    STAR: new ItemType(0, 'Star', '#FFD700', 'star', 100, false),
-    DIAMOND: new ItemType(1, 'Diamond', '#00FF88', 'diamond', 75, false),
-    HEART: new ItemType(2, 'Heart', '#FF1493', 'heart', 50, false),
-    SPIKE: new ItemType(3, 'Spike', '#FF4444', 'triangle', -30, true),
-    POISON: new ItemType(4, 'Poison', '#9933FF', 'square', -50, true),
+// ==================== CONFIGURATION ====================
+const CONFIG = {
+  PLAYER_SPEED: 7,
+  INITIAL_FALL_SPEED: 2,
+  MAX_FALL_SPEED: 8,
+  WAVE_DURATION: 15000, // 15 seconds per wave
+  SPAWN_RATE: 800, // Initial spawn rate in ms
+  SPAWN_RATE_DECREASE: 50, // How much spawn rate decreases per wave
+  COMBO_TIMEOUT: 2000, // Combo reset time in ms
+  POWERUP_DURATION: 5000, // Power-up lasts 5 seconds
+  ITEM_TRAIL_LENGTH: 5,
 };
 
-class Item {
-    constructor(x, y, type, speed) {
-        this.x = x;
-        this.y = y;
-        this.type = type;
-        this.speed = speed;
-        this.collected = false;
-    }
+const ITEM_TYPES = {
+  STAR: "star",
+  DIAMOND: "diamond",
+  HEART: "heart",
+  SPIKE: "spike",
+  POISON: "poison",
+  MAGNET: "magnet", // NEW!
+  SLOWMO: "slowmo", // NEW!
+  SHIELD: "shield", // NEW!
+};
 
-    update() {
-        this.y += this.speed;
-    }
+const ITEM_CONFIG = {
+  [ITEM_TYPES.STAR]: { color: "#FFD700", points: 100, size: 30, emoji: "★" },
+  [ITEM_TYPES.DIAMOND]: { color: "#00FFFF", points: 75, size: 28, emoji: "◆" },
+  [ITEM_TYPES.HEART]: {
+    color: "#FF69B4",
+    points: 50,
+    size: 26,
+    emoji: "♥",
+    heal: 1,
+  },
+  [ITEM_TYPES.SPIKE]: {
+    color: "#FF4444",
+    points: -30,
+    size: 25,
+    emoji: "▲",
+    damage: 1,
+  },
+  [ITEM_TYPES.POISON]: { color: "#9400D3", points: -50, size: 24, emoji: "■" },
+  [ITEM_TYPES.MAGNET]: {
+    color: "#FFA500",
+    points: 0,
+    size: 30,
+    emoji: "🧲",
+    powerup: "magnet",
+  },
+  [ITEM_TYPES.SLOWMO]: {
+    color: "#00CED1",
+    points: 0,
+    size: 30,
+    emoji: "⏸",
+    powerup: "slowmo",
+  },
+  [ITEM_TYPES.SHIELD]: {
+    color: "#C0C0C0",
+    points: 0,
+    size: 30,
+    emoji: "🛡️",
+    powerup: "shield",
+  },
+};
 
-    isOffScreen() {
-        return this.y > GameConfig.CANVAS_HEIGHT;
-    }
+// ==================== GAME STATE ====================
+const game = {
+  canvas: null,
+  ctx: null,
+  player: { x: 0, y: 0, width: 50, height: 50, targetX: 0 },
+  items: [],
+  particles: [],
+  trails: [],
+  score: 0,
+  highScore: localStorage.getItem("tidebreak-highscore") || 0,
+  wave: 1,
+  health: 5,
+  maxHealth: 5,
+  combo: 0,
+  comboTimer: 0,
+  lastSpawn: 0,
+  waveTimer: 0,
+  gameOver: false,
+  paused: false,
+  powerups: {
+    magnet: { active: false, timer: 0 },
+    slowmo: { active: false, timer: 0 },
+    shield: { active: false, timer: 0 },
+  },
+  fallSpeed: CONFIG.INITIAL_FALL_SPEED,
+  spawnRate: CONFIG.SPAWN_RATE,
+  itemsCollected: 0,
+  maxCombo: 0,
+  keys: {},
+  mouseX: null,
+  touchX: null,
+};
 
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.x, this.y);
+// ==================== INITIALIZATION ====================
+function init() {
+  game.canvas = document.getElementById("gameCanvas");
+  game.ctx = game.canvas.getContext("2d");
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
 
-        // Draw glow effect
-        ctx.shadowColor = this.type.color;
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+  // Input handlers
+  setupControls();
 
-        switch (this.type.shape) {
-            case 'circle':
-                ctx.fillStyle = this.type.color;
-                ctx.beginPath();
-                ctx.arc(0, 0, GameConfig.ITEM_SIZE / 2, 0, Math.PI * 2);
-                ctx.fill();
-                break;
+  // Hide menu and start
+  document.getElementById("mainMenu").style.display = "none";
+  document.getElementById("gameContainer").style.display = "block";
 
-            case 'square':
-                ctx.fillStyle = this.type.color;
-                ctx.fillRect(-GameConfig.ITEM_SIZE / 2, -GameConfig.ITEM_SIZE / 2, GameConfig.ITEM_SIZE, GameConfig.ITEM_SIZE);
-                break;
+  // Update high score in menu
+  document.getElementById("menuHighScore").textContent = game.highScore;
 
-            case 'triangle':
-                ctx.fillStyle = this.type.color;
-                ctx.beginPath();
-                ctx.moveTo(0, -GameConfig.ITEM_SIZE / 2);
-                ctx.lineTo(GameConfig.ITEM_SIZE / 2, GameConfig.ITEM_SIZE / 2);
-                ctx.lineTo(-GameConfig.ITEM_SIZE / 2, GameConfig.ITEM_SIZE / 2);
-                ctx.fill();
-                break;
-
-            case 'star':
-                this.drawStar(ctx, 0, 0, 5, GameConfig.ITEM_SIZE / 2, GameConfig.ITEM_SIZE / 4, this.type.color);
-                break;
-
-            case 'diamond':
-                ctx.fillStyle = this.type.color;
-                ctx.beginPath();
-                ctx.moveTo(0, -GameConfig.ITEM_SIZE / 2);
-                ctx.lineTo(GameConfig.ITEM_SIZE / 2, 0);
-                ctx.lineTo(0, GameConfig.ITEM_SIZE / 2);
-                ctx.lineTo(-GameConfig.ITEM_SIZE / 2, 0);
-                ctx.fill();
-                break;
-
-            case 'heart':
-                this.drawHeart(ctx, 0, 0, GameConfig.ITEM_SIZE / 2, this.type.color);
-                break;
-        }
-
-        ctx.restore();
-    }
-
-    drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius, color) {
-        let rot = Math.PI / 2 * 3;
-        let step = Math.PI / spikes;
-
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - outerRadius);
-
-        for (let i = 0; i < spikes; i++) {
-            ctx.lineTo(cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius);
-            rot += step;
-            ctx.lineTo(cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius);
-            rot += step;
-        }
-        ctx.lineTo(cx, cy - outerRadius);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    drawHeart(ctx, x, y, size, color) {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x, y + size / 2);
-        ctx.bezierCurveTo(x - size, y - size / 3, x - size / 2, y - size, x - size / 4, y - size);
-        ctx.bezierCurveTo(x, y - size / 2, x + size / 4, y - size, x + size / 2, y - size);
-        ctx.bezierCurveTo(x + size, y - size / 3, x, y + size / 2, x, y + size / 2);
-        ctx.fill();
-    }
+  resetGame();
+  gameLoop();
 }
 
-class Player {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.width = GameConfig.PLAYER_SIZE;
-        this.height = GameConfig.PLAYER_SIZE;
-        this.velocityX = 0;
-        this.targetX = x;
-        this.speed = 8;
-    }
-
-    update(keys) {
-        // Smooth movement to target position
-        if (keys['ArrowLeft'] || keys['a']) {
-            this.targetX = Math.max(this.width / 2, this.targetX - this.speed);
-        }
-        if (keys['ArrowRight'] || keys['d']) {
-            this.targetX = Math.min(GameConfig.CANVAS_WIDTH - this.width / 2, this.targetX + this.speed);
-        }
-
-        // Smoothly move towards target
-        this.x += (this.targetX - this.x) * 0.15;
-
-        // Clamp position
-        this.x = Math.max(this.width / 2, Math.min(GameConfig.CANVAS_WIDTH - this.width / 2, this.x));
-    }
-
-    draw(ctx) {
-        ctx.save();
-
-        // Draw glow
-        ctx.shadowColor = '#64c8ff';
-        ctx.shadowBlur = 20;
-
-        // Draw player circle
-        ctx.fillStyle = '#64c8ff';
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.width / 2, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Draw inner ring
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.width / 3, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.restore();
-    }
-
-    getBounds() {
-        return {
-            left: this.x - this.width / 2,
-            right: this.x + this.width / 2,
-            top: this.y - this.height / 2,
-            bottom: this.y + this.height / 2,
-        };
-    }
-
-    checkCollision(item) {
-        const dist = Math.hypot(item.x - this.x, item.y - this.y);
-        return dist < (this.width / 2 + GameConfig.ITEM_SIZE / 2);
-    }
+function resizeCanvas() {
+  game.canvas.width = window.innerWidth;
+  game.canvas.height = window.innerHeight;
+  game.player.y = game.canvas.height - 100;
 }
 
-class WaveManager {
-    constructor() {
-        this.currentWave = 1;
-        this.waveTimer = 0;
-        this.spawnTimer = 0;
-        this.itemSpeedMultiplier = 1;
-        this.spawnRateMultiplier = 1;
-    }
+function setupControls() {
+  // Keyboard
+  window.addEventListener("keydown", (e) => {
+    game.keys[e.key.toLowerCase()] = true;
+    if (e.key === "p" || e.key === "P") togglePause();
+  });
+  window.addEventListener("keyup", (e) => {
+    game.keys[e.key.toLowerCase()] = false;
+  });
 
-    update(deltaTime) {
-        this.waveTimer += deltaTime;
+  // Mouse
+  game.canvas.addEventListener("mousemove", (e) => {
+    game.mouseX = e.clientX;
+  });
 
-        // Increase difficulty every WAVE_INCREASE_INTERVAL ms
-        if (this.waveTimer >= GameConfig.WAVE_INCREASE_INTERVAL) {
-            this.currentWave++;
-            this.waveTimer = 0;
-            this.itemSpeedMultiplier += 0.15;
-            this.spawnRateMultiplier += 0.2;
-        }
-    }
+  // Touch
+  game.canvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    game.touchX = e.touches[0].clientX;
+  });
 
-    getCurrentSpawnRate() {
-        return GameConfig.BASE_SPAWN_RATE * this.spawnRateMultiplier;
-    }
-
-    getCurrentItemSpeed() {
-        return GameConfig.BASE_ITEM_SPEED * this.itemSpeedMultiplier;
-    }
-
-    getWaveNumber() {
-        return this.currentWave;
-    }
+  // Pause button
+  document.getElementById("pauseBtn").addEventListener("click", togglePause);
+  document.getElementById("resumeBtn").addEventListener("click", togglePause);
 }
 
-class Game {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.canvas.width = GameConfig.CANVAS_WIDTH;
-        this.canvas.height = GameConfig.CANVAS_HEIGHT;
-
-        this.player = new Player(GameConfig.CANVAS_WIDTH / 2, GameConfig.CANVAS_HEIGHT - 60);
-        this.items = [];
-        this.waveManager = new WaveManager();
-
-        this.score = 0;
-        this.combo = 1;
-        this.maxCombo = 1;
-        this.missedItems = 0;
-        this.collectedItems = 0;
-        this.gameOver = false;
-        this.lastFrameTime = Date.now();
-        this.spawnBuffer = 0;
-
-        this.keys = {};
-
-        this.setupEventListeners();
-        this.gameLoop();
-    }
-
-    setupEventListeners() {
-        document.addEventListener('keydown', (e) => {
-            this.keys[e.key] = true;
-        });
-
-        document.addEventListener('keyup', (e) => {
-            this.keys[e.key] = false;
-        });
-
-        // Touch controls for mobile
-        let touchStartX = 0;
-        document.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-        });
-
-        document.addEventListener('touchmove', (e) => {
-            if (touchStartX === 0) return;
-            const touchX = e.touches[0].clientX;
-            const rect = this.canvas.getBoundingClientRect();
-            const canvasX = (touchX - rect.left) / rect.width * GameConfig.CANVAS_WIDTH;
-            this.player.targetX = canvasX;
-        });
-
-        document.addEventListener('touchend', () => {
-            touchStartX = 0;
-        });
-
-        // Mouse controls
-        document.addEventListener('mousemove', (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            const canvasX = (e.clientX - rect.left) / rect.width * GameConfig.CANVAS_WIDTH;
-            this.player.targetX = canvasX;
-        });
-
-        document.getElementById('restartBtn').addEventListener('click', () => {
-            location.reload();
-        });
-    }
-
-    spawnItems() {
-        const spawnRate = this.waveManager.getCurrentSpawnRate();
-        this.spawnBuffer += spawnRate / 60; // Convert to per-frame
-
-        while (this.spawnBuffer >= 1) {
-            const randomType = Object.values(ITEM_TYPES)[Math.floor(Math.random() * Object.keys(ITEM_TYPES).length)];
-            const x = Math.random() * (GameConfig.CANVAS_WIDTH - GameConfig.ITEM_SIZE) + GameConfig.ITEM_SIZE / 2;
-            const y = -GameConfig.ITEM_SIZE;
-            const speed = this.waveManager.getCurrentItemSpeed();
-            this.items.push(new Item(x, y, randomType, speed));
-            this.spawnBuffer--;
-        }
-    }
-
-    update(deltaTime) {
-        if (this.gameOver) return;
-
-        this.player.update(this.keys);
-        this.waveManager.update(deltaTime);
-        
-        // Check if wave increased
-        const prevWave = this.waveManager.currentWave;
-        this.waveManager.update(deltaTime);
-        if (this.waveManager.currentWave > prevWave) {
-            audioManager.playWaveUpSound();
-        }
-        
-        this.spawnItems();
-
-        // Update items
-        for (let i = this.items.length - 1; i >= 0; i--) {
-            const item = this.items[i];
-            item.update();
-
-            // Check collision with player
-            if (this.player.checkCollision(item)) {
-                this.collectItem(item);
-                this.items.splice(i, 1);
-                continue;
-            }
-
-            // Check if missed
-            if (item.isOffScreen()) {
-                if (!item.collected) {
-                    // Only decrease health if it's NOT poison
-                    if (item.type !== ITEM_TYPES.POISON) {
-                        this.missedItems++;
-                        this.combo = 1;
-                        audioManager.playMissSound();
-                        if (this.missedItems >= GameConfig.MISSED_ITEMS_LIMIT) {
-                            this.endGame();
-                        }
-                    }
-                }
-                this.items.splice(i, 1);
-            }
-        }
-    }
-
-    collectItem(item) {
-        item.collected = true;
-        this.collectedItems++;
-
-        if (item.type.isNegative) {
-            this.score += item.type.points;
-            this.combo = 1;
-            this.createPopupText(item.x, item.y, item.type.points, true);
-            audioManager.playNegativeSound(item.type);
-
-            // Poison decreases health only when collected, not when missed
-            if (item.type === ITEM_TYPES.POISON) {
-                this.missedItems++;
-                this.createPopupText(item.x, item.y - 20, 'HEALTH -1', true);
-                if (this.missedItems >= GameConfig.MISSED_ITEMS_LIMIT) {
-                    this.endGame();
-                }
-            }
-        } else {
-            const earnedPoints = item.type.points * this.combo;
-            this.score += earnedPoints;
-            this.combo++;
-            this.maxCombo = Math.max(this.maxCombo, this.combo);
-            this.createPopupText(item.x, item.y, `+${earnedPoints}`, false);
-            audioManager.playCollectSound(item.type);
-
-            // Hearts restore one missed item (health)
-            if (item.type === ITEM_TYPES.HEART && this.missedItems > 0) {
-                this.missedItems--;
-                this.createPopupText(item.x, item.y - 20, 'HEALTH +1', false);
-            }
-        }
-
-        this.score = Math.max(0, this.score);
-        this.updateUI();
-    }
-
-    createPopupText(x, y, text, isNegative) {
-        const popup = document.createElement('div');
-        popup.style.position = 'fixed';
-        popup.style.left = (x * window.innerWidth / GameConfig.CANVAS_WIDTH) + 'px';
-        popup.style.top = (y * window.innerHeight / GameConfig.CANVAS_HEIGHT) + 'px';
-        popup.style.color = isNegative ? '#ff4444' : '#00ff88';
-        popup.style.fontSize = '20px';
-        popup.style.fontWeight = 'bold';
-        popup.style.pointerEvents = 'none';
-        popup.style.textShadow = '0 0 10px ' + (isNegative ? 'rgba(255, 68, 68, 0.5)' : 'rgba(0, 255, 136, 0.5)');
-        popup.textContent = text;
-
-        document.body.appendChild(popup);
-
-        let opacity = 1;
-        const interval = setInterval(() => {
-            opacity -= 0.05;
-            y -= 2;
-            popup.style.opacity = opacity;
-            popup.style.transform = `translateY(-${GameConfig.CANVAS_HEIGHT - y}px)`;
-
-            if (opacity <= 0) {
-                clearInterval(interval);
-                popup.remove();
-            }
-        }, 30);
-    }
-
-    updateUI() {
-        document.getElementById('scoreValue').textContent = this.score;
-        document.getElementById('multiplierValue').textContent = this.combo + 'x';
-        document.getElementById('waveValue').textContent = this.waveManager.getWaveNumber();
-    }
-
-    endGame() {
-        this.gameOver = true;
-        audioManager.playGameOverSound();
-        document.getElementById('finalScore').textContent = this.score;
-        document.getElementById('finalWave').textContent = this.waveManager.getWaveNumber();
-        document.getElementById('finalItems').textContent = this.collectedItems;
-        document.getElementById('finalCombo').textContent = this.maxCombo + 'x';
-        document.getElementById('gameOverModal').classList.add('show');
-    }
-
-    draw() {
-        // Clear canvas
-        this.ctx.fillStyle = 'rgba(15, 27, 60, 0.3)';
-        this.ctx.fillRect(0, 0, GameConfig.CANVAS_WIDTH, GameConfig.CANVAS_HEIGHT);
-
-        // Draw wave effect
-        this.drawWaveBackground();
-
-        // Draw items
-        this.items.forEach(item => item.draw(this.ctx));
-
-        // Draw player
-        this.player.draw(this.ctx);
-
-        // Draw missed items indicator
-        this.drawMissedIndicator();
-
-        // Draw debug info if needed
-        // this.drawDebugInfo();
-    }
-
-    drawWaveBackground() {
-        const waveTime = Date.now() / 1000;
-        const waveHeight = 3;
-        const waveFrequency = 0.01;
-
-        for (let y = 0; y < GameConfig.CANVAS_HEIGHT; y += 30) {
-            const offset = Math.sin(waveTime + y * waveFrequency) * waveHeight;
-            this.ctx.strokeStyle = `rgba(100, 200, 255, ${0.1 - y / GameConfig.CANVAS_HEIGHT * 0.08})`;
-            this.ctx.lineWidth = 1;
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y + offset);
-            this.ctx.lineTo(GameConfig.CANVAS_WIDTH, y + offset);
-            this.ctx.stroke();
-        }
-    }
-
-    drawMissedIndicator() {
-        const barWidth = 200;
-        const barHeight = 10;
-        const barX = GameConfig.CANVAS_WIDTH - barWidth - 20;
-        const barY = 20;
-
-        // Background
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        this.ctx.fillRect(barX, barY, barWidth, barHeight);
-
-        // Health bar
-        const filledWidth = barWidth * (1 - this.missedItems / GameConfig.MISSED_ITEMS_LIMIT);
-        const healthColor = this.missedItems / GameConfig.MISSED_ITEMS_LIMIT > 0.7 ? '#ff4444' : '#00ff88';
-        this.ctx.fillStyle = healthColor;
-        this.ctx.fillRect(barX, barY, filledWidth, barHeight);
-
-        // Border
-        this.ctx.strokeStyle = healthColor;
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(barX, barY, barWidth, barHeight);
-
-        // Label
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        this.ctx.font = 'bold 10px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText(`MISSED: ${this.missedItems}/${GameConfig.MISSED_ITEMS_LIMIT}`, barX + barWidth / 2, barY - 5);
-    }
-
-    gameLoop() {
-        const currentTime = Date.now();
-        const deltaTime = Math.min(currentTime - this.lastFrameTime, 50); // Cap at 50ms
-        this.lastFrameTime = currentTime;
-
-        this.update(deltaTime);
-        this.draw();
-
-        requestAnimationFrame(() => this.gameLoop());
-    }
+function togglePause() {
+  if (game.gameOver) return;
+  game.paused = !game.paused;
+  document.getElementById("pauseModal").style.display = game.paused
+    ? "block"
+    : "none";
 }
 
-// Initialize game when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    const startBtn = document.getElementById('startBtn');
-    const mainMenu = document.getElementById('mainMenu');
-    const gameContainer = document.getElementById('gameContainer');
+// ==================== GAME LOGIC ====================
+function resetGame() {
+  game.items = [];
+  game.particles = [];
+  game.trails = [];
+  game.score = 0;
+  game.wave = 1;
+  game.health = game.maxHealth;
+  game.combo = 0;
+  game.comboTimer = 0;
+  game.waveTimer = 0;
+  game.gameOver = false;
+  game.paused = false;
+  game.itemsCollected = 0;
+  game.maxCombo = 0;
+  game.fallSpeed = CONFIG.INITIAL_FALL_SPEED;
+  game.spawnRate = CONFIG.SPAWN_RATE;
 
-    // Start game button click handler
-    startBtn.addEventListener('click', () => {
-        mainMenu.style.display = 'none';
-        gameContainer.style.display = 'flex';
-        new Game();
+  // Reset power-ups
+  Object.keys(game.powerups).forEach((key) => {
+    game.powerups[key].active = false;
+    game.powerups[key].timer = 0;
+  });
+
+  updateHUD();
+  document.getElementById("gameOverModal").style.display = "none";
+}
+
+function spawnItem() {
+  const now = Date.now();
+  if (now - game.lastSpawn < game.spawnRate) return;
+
+  game.lastSpawn = now;
+
+  // Weighted random spawn
+  const weights = [
+    { type: ITEM_TYPES.STAR, weight: 10 },
+    { type: ITEM_TYPES.DIAMOND, weight: 20 },
+    { type: ITEM_TYPES.HEART, weight: 15 },
+    { type: ITEM_TYPES.SPIKE, weight: 25 },
+    { type: ITEM_TYPES.POISON, weight: 15 },
+    { type: ITEM_TYPES.MAGNET, weight: 5 },
+    { type: ITEM_TYPES.SLOWMO, weight: 5 },
+    { type: ITEM_TYPES.SHIELD, weight: 5 },
+  ];
+
+  const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+  let random = Math.random() * totalWeight;
+
+  let selectedType = ITEM_TYPES.STAR;
+  for (const item of weights) {
+    random -= item.weight;
+    if (random <= 0) {
+      selectedType = item.type;
+      break;
+    }
+  }
+
+  const config = ITEM_CONFIG[selectedType];
+  game.items.push({
+    x: Math.random() * (game.canvas.width - config.size),
+    y: -config.size,
+    type: selectedType,
+    config: config,
+    trail: [],
+  });
+}
+
+function updatePlayer() {
+  // Get target position
+  let targetX = game.player.x;
+
+  if (game.keys["arrowleft"] || game.keys["a"]) {
+    targetX -= CONFIG.PLAYER_SPEED * 5;
+  }
+  if (game.keys["arrowright"] || game.keys["d"]) {
+    targetX += CONFIG.PLAYER_SPEED * 5;
+  }
+  if (game.mouseX !== null) {
+    targetX = game.mouseX - game.player.width / 2;
+  }
+  if (game.touchX !== null) {
+    targetX = game.touchX - game.player.width / 2;
+  }
+
+  // Apply magnet power-up
+  if (game.powerups.magnet.active) {
+    // Attract nearby items
+    game.items.forEach((item) => {
+      const dx =
+        game.player.x + game.player.width / 2 - (item.x + item.config.size / 2);
+      const dy =
+        game.player.y +
+        game.player.height / 2 -
+        (item.y + item.config.size / 2);
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < 150) {
+        const force = ((150 - distance) / 150) * 0.3;
+        item.x += dx * force;
+      }
     });
+  }
+
+  // Smooth movement
+  game.player.x += (targetX - game.player.x) * 0.2;
+
+  // Clamp to screen
+  game.player.x = Math.max(
+    0,
+    Math.min(game.canvas.width - game.player.width, game.player.x)
+  );
+}
+
+function updateItems(deltaTime) {
+  const speedMultiplier = game.powerups.slowmo.active ? 0.3 : 1;
+
+  game.items.forEach((item, index) => {
+    // Update trail
+    item.trail.push({
+      x: item.x + item.config.size / 2,
+      y: item.y + item.config.size / 2,
+    });
+    if (item.trail.length > CONFIG.ITEM_TRAIL_LENGTH) {
+      item.trail.shift();
+    }
+
+    // Move item
+    item.y += game.fallSpeed * speedMultiplier;
+
+    // Check collision with player
+    if (checkCollision(item, game.player)) {
+      collectItem(item, index);
+    }
+
+    // Remove if off-screen
+    if (item.y > game.canvas.height) {
+      game.items.splice(index, 1);
+      if (item.type !== ITEM_TYPES.POISON) {
+        game.health--;
+        game.combo = 0;
+        createParticles(
+          item.x + item.config.size / 2,
+          item.y + item.config.size / 2,
+          "#ff4444",
+          5
+        );
+        audioManager.playMissSound();
+        updateHUD();
+      }
+    }
+  });
+}
+
+function checkCollision(item, player) {
+  return (
+    item.x < player.x + player.width &&
+    item.x + item.config.size > player.x &&
+    item.y < player.y + player.height &&
+    item.y + item.config.size > player.y
+  );
+}
+
+function collectItem(item, index) {
+  const config = item.config;
+
+  // Handle power-ups
+  if (config.powerup) {
+    activatePowerUp(config.powerup);
+    createParticles(
+      item.x + item.config.size / 2,
+      item.y + item.config.size / 2,
+      config.color,
+      20
+    );
+    game.items.splice(index, 1);
+    audioManager.playCollectSound(item.type);
+    return;
+  }
+
+  // Calculate points with combo
+  let points = config.points;
+  if (points > 0) {
+    game.combo++;
+    game.comboTimer = CONFIG.COMBO_TIMEOUT;
+    game.maxCombo = Math.max(game.maxCombo, game.combo);
+    points *= game.combo;
+    game.itemsCollected++;
+
+    // Flash combo indicator
+    const multiplierEl = document.getElementById("multiplierValue");
+    multiplierEl.classList.add("combo-active");
+    setTimeout(() => multiplierEl.classList.remove("combo-active"), 500);
+  } else {
+    // Negative item
+    if (game.powerups.shield.active) {
+      // Shield absorbs one hit
+      game.powerups.shield.active = false;
+      createParticles(
+        item.x + item.config.size / 2,
+        item.y + item.config.size / 2,
+        "#C0C0C0",
+        15
+      );
+      game.items.splice(index, 1);
+      return;
+    }
+
+    game.combo = 0;
+    if (config.damage) {
+      game.health -= config.damage;
+      screenShake();
+    }
+  }
+
+  // Apply health changes
+  if (config.heal) {
+    game.health = Math.min(game.maxHealth, game.health + config.heal);
+  }
+
+  // Update score
+  game.score += points;
+  if (game.score > game.highScore) {
+    game.highScore = game.score;
+    localStorage.setItem("tidebreak-highscore", game.highScore);
+  }
+
+  // Visual feedback
+  createParticles(
+    item.x + item.config.size / 2,
+    item.y + item.config.size / 2,
+    config.color,
+    points > 0 ? 10 : 5
+  );
+
+  // Remove item
+  game.items.splice(index, 1);
+
+  // Sound
+  if (points > 0) {
+    audioManager.playCollectSound(item.type);
+  } else {
+    audioManager.playNegativeSound(item.type);
+  }
+
+  updateHUD();
+}
+
+function activatePowerUp(type) {
+  game.powerups[type].active = true;
+  game.powerups[type].timer = CONFIG.POWERUP_DURATION;
+
+  // Show indicator
+  const indicator = document.getElementById("powerupIndicator");
+  const names = { magnet: "MAGNET", slowmo: "SLOW MOTION", shield: "SHIELD" };
+  indicator.textContent = `${names[type]} ACTIVATED!`;
+  indicator.classList.add("active");
+
+  setTimeout(() => indicator.classList.remove("active"), 2000);
+}
+
+function updatePowerUps(deltaTime) {
+  Object.keys(game.powerups).forEach((key) => {
+    const powerup = game.powerups[key];
+    if (powerup.active) {
+      powerup.timer -= deltaTime;
+      if (powerup.timer <= 0) {
+        powerup.active = false;
+      }
+    }
+  });
+}
+
+function updateCombo(deltaTime) {
+  if (game.combo > 0) {
+    game.comboTimer -= deltaTime;
+    if (game.comboTimer <= 0) {
+      game.combo = 0;
+      updateHUD();
+    }
+  }
+}
+
+function updateWave(deltaTime) {
+  game.waveTimer += deltaTime;
+  if (game.waveTimer >= CONFIG.WAVE_DURATION) {
+    game.waveTimer = 0;
+    game.wave++;
+    game.fallSpeed = Math.min(game.fallSpeed + 0.5, CONFIG.MAX_FALL_SPEED);
+    game.spawnRate = Math.max(game.spawnRate - CONFIG.SPAWN_RATE_DECREASE, 200);
+    audioManager.playWaveUpSound();
+    createParticles(
+      game.canvas.width / 2,
+      game.canvas.height / 2,
+      "#00FFFF",
+      30
+    );
+  }
+}
+
+function createParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count;
+    const speed = 2 + Math.random() * 3;
+    game.particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      color,
+      size: 3 + Math.random() * 3,
+    });
+  }
+}
+
+function updateParticles() {
+  game.particles = game.particles.filter((p) => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.02;
+    p.size *= 0.96;
+    return p.life > 0;
+  });
+}
+
+function screenShake() {
+  document.body.classList.add("screen-shake");
+  setTimeout(() => document.body.classList.remove("screen-shake"), 300);
+}
+
+// ==================== RENDERING ====================
+function render() {
+  // Clear canvas
+  game.ctx.fillStyle = "rgba(0, 20, 40, 0.1)";
+  game.ctx.fillRect(0, 0, game.canvas.width, game.canvas.height);
+
+  // Render item trails
+  game.items.forEach((item) => {
+    if (item.trail.length > 1) {
+      game.ctx.strokeStyle = item.config.color + "40";
+      game.ctx.lineWidth = 3;
+      game.ctx.beginPath();
+      item.trail.forEach((point, i) => {
+        if (i === 0) game.ctx.moveTo(point.x, point.y);
+        else game.ctx.lineTo(point.x, point.y);
+      });
+      game.ctx.stroke();
+    }
+  });
+
+  // Render items
+  game.items.forEach((item) => {
+    // Glow effect
+    const gradient = game.ctx.createRadialGradient(
+      item.x + item.config.size / 2,
+      item.y + item.config.size / 2,
+      0,
+      item.x + item.config.size / 2,
+      item.y + item.config.size / 2,
+      item.config.size
+    );
+    gradient.addColorStop(0, item.config.color + "ff");
+    gradient.addColorStop(1, item.config.color + "00");
+
+    game.ctx.fillStyle = gradient;
+    game.ctx.fillRect(
+      item.x - 5,
+      item.y - 5,
+      item.config.size + 10,
+      item.config.size + 10
+    );
+
+    // Item itself
+    game.ctx.fillStyle = item.config.color;
+    game.ctx.font = `${item.config.size}px Arial`;
+    game.ctx.textAlign = "center";
+    game.ctx.textBaseline = "middle";
+    game.ctx.fillText(
+      item.config.emoji,
+      item.x + item.config.size / 2,
+      item.y + item.config.size / 2
+    );
+  });
+
+  // Render player
+  const playerColor = game.powerups.shield.active ? "#C0C0C0" : "#4169E1";
+  const glowSize = game.powerups.shield.active ? 15 : 8;
+
+  // Player glow
+  const gradient = game.ctx.createRadialGradient(
+    game.player.x + game.player.width / 2,
+    game.player.y + game.player.height / 2,
+    0,
+    game.player.x + game.player.width / 2,
+    game.player.y + game.player.height / 2,
+    glowSize
+  );
+  gradient.addColorStop(0, playerColor + "ff");
+  gradient.addColorStop(1, playerColor + "00");
+  game.ctx.fillStyle = gradient;
+  game.ctx.fillRect(
+    game.player.x - glowSize,
+    game.player.y - glowSize,
+    game.player.width + glowSize * 2,
+    game.player.height + glowSize * 2
+  );
+
+  // Player
+  game.ctx.fillStyle = playerColor;
+  game.ctx.fillRect(
+    game.player.x,
+    game.player.y,
+    game.player.width,
+    game.player.height
+  );
+  game.ctx.strokeStyle = "#fff";
+  game.ctx.lineWidth = 2;
+  game.ctx.strokeRect(
+    game.player.x,
+    game.player.y,
+    game.player.width,
+    game.player.height
+  );
+
+  // Player emoji
+  game.ctx.font = "30px Arial";
+  game.ctx.textAlign = "center";
+  game.ctx.textBaseline = "middle";
+  game.ctx.fillText(
+    "🚢",
+    game.player.x + game.player.width / 2,
+    game.player.y + game.player.height / 2
+  );
+
+  // Render particles
+  game.particles.forEach((p) => {
+    game.ctx.globalAlpha = p.life;
+    game.ctx.fillStyle = p.color;
+    game.ctx.beginPath();
+    game.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    game.ctx.fill();
+  });
+  game.ctx.globalAlpha = 1;
+}
+
+// ==================== HUD & UI ====================
+function updateHUD() {
+  document.getElementById("scoreValue").textContent = game.score;
+  document.getElementById("multiplierValue").textContent = game.combo + "x";
+  document.getElementById("waveValue").textContent = game.wave;
+
+  // Update health bar
+  const healthPercent = (game.health / game.maxHealth) * 100;
+  document.getElementById("healthFill").style.width = healthPercent + "%";
+
+  // Check game over
+  if (game.health <= 0 && !game.gameOver) {
+    gameOver();
+  }
+}
+
+function gameOver() {
+  game.gameOver = true;
+  document.getElementById("finalScore").textContent = game.score;
+  document.getElementById("finalWave").textContent = game.wave;
+  document.getElementById("finalItems").textContent = game.itemsCollected;
+  document.getElementById("finalCombo").textContent = game.maxCombo;
+  document.getElementById("highScoreDisplay").textContent = game.highScore;
+  document.getElementById("gameOverModal").style.display = "block";
+  audioManager.playGameOverSound();
+}
+
+// ==================== GAME LOOP ====================
+let lastTime = 0;
+function gameLoop(timestamp) {
+  const deltaTime = timestamp - lastTime;
+  lastTime = timestamp;
+
+  if (!game.paused && !game.gameOver) {
+    updatePlayer();
+    updateItems(deltaTime);
+    updateParticles();
+    updatePowerUps(deltaTime);
+    updateCombo(deltaTime);
+    updateWave(deltaTime);
+    spawnItem();
+    render();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ==================== EVENT LISTENERS ====================
+document.getElementById("startBtn").addEventListener("click", init);
+document.getElementById("restartBtn").addEventListener("click", () => {
+  resetGame();
 });
+
+// Add CSS variables for particles
+document.documentElement.style.setProperty("--tx", "0px");
+document.documentElement.style.setProperty("--ty", "0px");
