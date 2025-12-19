@@ -3,11 +3,11 @@ const CONFIG = {
   PLAYER_SPEED: 7,
   INITIAL_FALL_SPEED: 2,
   MAX_FALL_SPEED: 8,
-  WAVE_DURATION: 15000, // 15 seconds per wave
-  SPAWN_RATE: 800, // Initial spawn rate in ms
-  SPAWN_RATE_DECREASE: 50, // How much spawn rate decreases per wave
-  COMBO_TIMEOUT: 2000, // Combo reset time in ms
-  POWERUP_DURATION: 5000, // Power-up lasts 5 seconds
+  WAVE_DURATION: 15000,
+  SPAWN_RATE: 800,
+  SPAWN_RATE_DECREASE: 50,
+  COMBO_TIMEOUT: 2000,
+  POWERUP_DURATION: 5000,
   ITEM_TRAIL_LENGTH: 5,
 };
 
@@ -17,9 +17,9 @@ const ITEM_TYPES = {
   HEART: "heart",
   SPIKE: "spike",
   POISON: "poison",
-  MAGNET: "magnet", // NEW!
-  SLOWMO: "slowmo", // NEW!
-  SHIELD: "shield", // NEW!
+  MAGNET: "magnet",
+  SLOWMO: "slowmo",
+  SHIELD: "shield",
 };
 
 const ITEM_CONFIG = {
@@ -101,7 +101,6 @@ function init() {
   game.canvas = document.getElementById("gameCanvas");
   game.ctx = game.canvas.getContext("2d");
   resizeCanvas();
-  window.addEventListener("resize", resizeCanvas);
 
   // Input handlers
   setupControls();
@@ -118,8 +117,9 @@ function init() {
 }
 
 function resizeCanvas() {
-  game.canvas.width = window.innerWidth;
-  game.canvas.height = window.innerHeight;
+  // Fixed canvas size for itch.io - 800x600 is optimal for desktop and mobile
+  game.canvas.width = 800;
+  game.canvas.height = 600;
   game.player.y = game.canvas.height - 100;
 }
 
@@ -135,13 +135,15 @@ function setupControls() {
 
   // Mouse
   game.canvas.addEventListener("mousemove", (e) => {
-    game.mouseX = e.clientX;
+    const rect = game.canvas.getBoundingClientRect();
+    game.mouseX = e.clientX - rect.left;
   });
 
   // Touch
   game.canvas.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    game.touchX = e.touches[0].clientX;
+    const rect = game.canvas.getBoundingClientRect();
+    game.touchX = e.touches[0].clientX - rect.left;
   });
 
   // Pause button
@@ -264,7 +266,7 @@ function updatePlayer() {
   // Smooth movement
   game.player.x += (targetX - game.player.x) * 0.2;
 
-  // Clamp to screen
+  // Clamp to canvas
   game.player.x = Math.max(
     0,
     Math.min(game.canvas.width - game.player.width, game.player.x)
